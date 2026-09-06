@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniApp Shop Pro</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @keyframes pulse-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .animate-pulse-glow { animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- MÀN HÌNH LOADING -->
+    <div id="loader-screen" class="fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="relative w-24 h-24 mb-6">
+            <div class="absolute inset-0 rounded-full border-4 border-indigo-500/20 animate-pulse"></div>
+            <div class="absolute inset-0 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin"></div>
+            <div class="absolute inset-0 flex items-center justify-center font-bold text-xl text-indigo-400" id="loader-percent">0%</div>
+        </div>
+        <h2 class="text-lg font-semibold tracking-wider text-slate-300">ĐANG LƯU TRỮ VÀ KHỞI TẠO...</h2>
+        <p class="text-xs text-slate-500 mt-2">Đồng bộ toàn bộ dữ liệu qua Telegram ID...</p>
+    </div>
+
+    <!-- GIAO DIỆN CHÍNH -->
+    <div id="app" class="max-w-md mx-auto min-h-screen pb-20 flex flex-col hidden">
+        <!-- Header -->
+        <header class="bg-slate-900/80 backdrop-blur border-b border-slate-800 p-4 sticky top-0 z-30 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-lg shadow-lg shadow-indigo-500/30" id="user-avatar-initial">V</div>
+                <div>
+                    <h1 class="font-bold text-sm text-white" id="user-display-name">Đang tải...</h1>
+                    <span class="text-xs text-emerald-400 font-medium flex items-center gap-1"><i class="fa-solid fa-circle text-[8px]"></i> <span id="user-balance">0đ</span></span>
+                </div>
+            </div>
+            <div id="admin-badge" class="hidden">
+                <span class="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1">
+                    <i class="fa-solid fa-shield-halved"></i> ADMIN
+                </span>
+            </div>
+        </header>
+
+        <!-- Nội dung Tabs -->
+        <main class="flex-1 p-4 space-y-4 overflow-y-auto">
+            <!-- TAB: SẢN PHẨM -->
+            <div id="tab-shop" class="space-y-4 tab-content">
+                <div class="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/20 rounded-2xl p-4 shadow-xl">
+                    <h2 class="text-base font-bold text-indigo-300 mb-1">Cửa Hàng Uy Tín</h2>
+                    <p class="text-xs text-slate-400">Chọn sản phẩm hệ thống, giao dịch tự động 100% nhận Key ngay lập tức.</p>
+                </div>
+                <div id="product-list" class="space-y-3"></div>
+            </div>
+
+            <!-- TAB: NẠP TIỀN -->
+            <div id="tab-deposit" class="space-y-4 tab-content hidden">
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center space-y-3 shadow-xl">
+                    <h2 class="text-sm font-bold text-slate-200 uppercase tracking-wide">Quét mã QR chuyển khoản</h2>
+                    <div class="inline-block p-2 bg-white rounded-xl shadow-md">
+                        <img src="https://files.catbox.moe/xacxp4.jpeg" alt="QR Bank" class="w-48 h-48 object-cover rounded-lg mx-auto">
+                    </div>
+                    <div class="text-xs text-slate-400 space-y-1.5 bg-slate-950 p-3 rounded-xl border border-slate-800 text-left">
+                        <p class="flex justify-between"><span>Số tài khoản:</span> <span class="font-bold text-emerald-400 select-all">0976734923</span></p>
+                        <p class="flex justify-between"><span>Chủ tài khoản:</span> <span class="font-bold text-white">ADMIN SYSTEM</span></p>
+                        <p class="flex justify-between"><span>Nội dung CK:</span> <span class="font-bold text-indigo-400 select-all" id="transfer-syntax">NAP [ID]</span></p>
+                    </div>
+
+                    <!-- Ô nhập số tiền muốn nạp -->
+                    <div class="space-y-2 text-left pt-1">
+                        <label class="text-xs text-slate-400 font-medium">Nhập số tiền bạn đã chuyển khoản (VNĐ):</label>
+                        <input type="number" id="deposit-amount-input" placeholder="Ví dụ: 50000" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-bold text-indigo-400 focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <button onclick="requestDeposit()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-600/30 transition">
+                        Gửi Yêu Cầu Duyệt Tiền Về Chat Bot
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB: HỒ SƠ & LỊCH SỬ -->
+            <div id="tab-profile" class="space-y-4 tab-content hidden">
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Thông tin tài khoản</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between py-1 border-b border-slate-800">
+                            <span class="text-slate-400">Telegram ID:</span>
+                            <span class="font-mono text-indigo-400" id="profile-id">--</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-800">
+                            <span class="text-slate-400">Họ tên:</span>
+                            <span class="font-semibold text-white" id="profile-name">--</span>
+                        </div>
+                        <div class="flex justify-between py-1">
+                            <span class="text-slate-400">Số dư hiện tại:</span>
+                            <span class="font-bold text-emerald-400" id="profile-balance">0đ</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Lịch sử mua hàng & Key đã nhận</h3>
+                    <div id="purchase-history" class="space-y-2 max-h-48 overflow-y-auto text-xs">
+                        <p class="text-slate-500 text-center py-4">Chưa có giao dịch nào.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: ADMIN QUẢN LÝ RIÊNG -->
+            <div id="tab-admin" class="space-y-4 tab-content hidden">
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
+                    <h2 class="text-sm font-bold text-amber-400 flex items-center gap-2"><i class="fa-solid fa-lock"></i> KHU VỰC QUẢN TRỊ VIÊN</h2>
+                    <p class="text-xs text-slate-400 mt-1">Toàn bộ dữ liệu sản phẩm, kho key và yêu cầu nạp tiền được lưu trữ tự động.</p>
+                </div>
+
+                <!-- 1. Thêm sản phẩm -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <h3 class="text-xs font-bold text-slate-300 uppercase">1. Thêm sản phẩm mới</h3>
+                    <input type="text" id="admin-p-name" placeholder="Tên sản phẩm" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    <input type="number" id="admin-p-price" placeholder="Giá tiền (VNĐ)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    <button onclick="adminAddProduct()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition">Lưu & Thêm Sản Phẩm</button>
+                </div>
+
+                <!-- 2. Xóa sản phẩm -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <h3 class="text-xs font-bold text-slate-300 uppercase">2. Xóa sản phẩm</h3>
+                    <div id="admin-product-management-list" class="space-y-2 max-h-40 overflow-y-auto"></div>
+                </div>
+
+                <!-- 3. Quản lý Key -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <h3 class="text-xs font-bold text-slate-300 uppercase">3. Quản lý Key sản phẩm</h3>
+                    <select id="admin-key-product-select" onchange="renderKeyManagerList()" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></select>
+                    <textarea id="admin-key-input" placeholder="Nhập các key cần thêm (mỗi key 1 dòng)" rows="2" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs focus:outline-none focus:border-indigo-500 font-mono"></textarea>
+                    <button onclick="adminAddKeys()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition">Lưu & Thêm Key Vào Kho</button>
+                    <div class="pt-2 border-t border-slate-800">
+                        <p class="text-[11px] text-slate-400 mb-1">Danh sách key hiện có:</p>
+                        <div id="admin-key-item-list" class="space-y-1.5 max-h-36 overflow-y-auto"></div>
+                    </div>
+                </div>
+
+                <!-- 4. Duyệt tiền user -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <h3 class="text-xs font-bold text-slate-300 uppercase">4. Yêu cầu nạp tiền chờ duyệt</h3>
+                    <div id="admin-deposit-requests" class="space-y-2">
+                        <p class="text-xs text-slate-500 text-center">Không có yêu cầu nạp tiền nào.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Navbar đáy -->
+        <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-slate-900/90 backdrop-blur border-t border-slate-800 flex justify-around p-3 z-30">
+            <button onclick="switchTab('shop')" class="nav-btn flex flex-col items-center text-indigo-400 text-xs font-medium" data-target="shop">
+                <i class="fa-solid fa-store text-lg"></i><span>Cửa hàng</span>
+            </button>
+            <button onclick="switchTab('deposit')" class="nav-btn flex flex-col items-center text-slate-400 text-xs font-medium" data-target="deposit">
+                <i class="fa-solid fa-wallet text-lg"></i><span>Nạp tiền</span>
+            </button>
+            <button onclick="switchTab('profile')" class="nav-btn flex flex-col items-center text-slate-400 text-xs font-medium" data-target="profile">
+                <i class="fa-solid fa-user text-lg"></i><span>Hồ sơ</span>
+            </button>
+            <button id="nav-admin-btn" onclick="switchTab('admin')" class="nav-btn flex flex-col items-center text-slate-400 text-xs font-medium hidden" data-target="admin">
+                <i class="fa-solid fa-gauge text-lg"></i><span>Admin</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- SCRIPT XỬ LÝ LƯU TRỮ TOÀN BỘ -->
+    <script>
+        const BOT_TOKEN = "8774262600:AAFcG0dGDWHJjWpHimRErS9vVbWQj82TdNY"; 
+        const ADMIN_ID = 8647955563; // THAY ID ADMIN CỦA BẠN VÀO ĐÂY
+
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let currentUser = {
+            id: tg.initDataUnsafe?.user?.id || 999999, 
+            first_name: tg.initDataUnsafe?.user?.first_name || "Văn Vinh",
+            username: tg.initDataUnsafe?.user?.username || "vanvinh"
+        };
+
+        // Khởi tạo và lưu toàn bộ dữ liệu vào localStorage
+        let db = JSON.parse(localStorage.getItem('miniapp_db')) || {
+            balances: {},
+            products: [
+                { id: 1, name: "Key VIP Script Free Fire 1 Ngày", price: 10000, keys: ["KEY-FF-9991", "KEY-FF-9992"] },
+                { id: 2, name: "Key Hack Menu Mùa Mới Vĩnh Viễn", price: 50000, keys: ["KEY-MOD-8881"] }
+            ],
+            purchases: {},
+            deposits: [],
+            settings: { notice: "Chào mừng bạn đến với Shop MiniApp!" }
+        };
+
+        function saveDB() {
+            localStorage.setItem('miniapp_db', JSON.stringify(db));
+        }
+
+        function sendDepositNotificationToAdmin(userId, name, amount, requestId) {
+            if (BOT_TOKEN.includes("THAY_TOKEN")) return;
+            
+            const message = `🔔 *CÓ YÊU CẦU NẠP TIỀN MỚI!*\n\n` +
+                            `👤 Khách hàng: ${name}\n` +
+                            `🆔 Telegram ID: \`${userId}\`\n` +
+                            `💰 Số tiền nạp: *${amount.toLocaleString('vi-VN')}đ*\n` +
+                            `📝 Nội dung CK: \`NAP ${userId}\`\n` +
+                            `⏱ Thời gian: ${new Date().toLocaleString('vi-VN')}`;
+
+            const inlineKeyboard = {
+                inline_keyboard: [
+                    [
+                        { text: "✅ Duyệt (+ " + amount.toLocaleString('vi-VN') + "đ)", callback_data: `approve_${userId}_${amount}_${requestId}` },
+                        { text: "❌ Từ chối", callback_data: `reject_${userId}_${requestId}` }
+                    ]
+                ]
+            };
+
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: ADMIN_ID,
+                    text: message,
+                    parse_mode: 'Markdown',
+                    reply_markup: inlineKeyboard
+                })
+            }).catch(err => console.log(err));
+        }
+
+        function sendTelegramNotification(targetId, message) {
+            if (BOT_TOKEN.includes("THAY_TOKEN")) return;
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: targetId, text: message, parse_mode: 'Markdown' })
+            }).catch(err => console.log(err));
+        }
+
+        let loadProgress = 0;
+        const interval = setInterval(() => {
+            loadProgress += Math.floor(Math.random() * 15) + 10;
+            if (loadProgress >= 100) {
+                loadProgress = 100;
+                clearInterval(interval);
+                document.getElementById('loader-screen').classList.add('opacity-0', 'pointer-events-none');
+                setTimeout(() => document.getElementById('loader-screen').remove(), 500);
+                document.getElementById('app').classList.remove('hidden');
+                initializeAppUI();
+            }
+            document.getElementById('loader-percent').innerText = loadProgress + '%';
+        }, 120);
+
+        function initializeAppUI() {
+            document.getElementById('user-display-name').innerText = currentUser.first_name;
+            document.getElementById('user-avatar-initial').innerText = currentUser.first_name.charAt(0).toUpperCase();
+            document.getElementById('profile-id').innerText = currentUser.id;
+            document.getElementById('profile-name').innerText = currentUser.first_name;
+            document.getElementById('transfer-syntax').innerText = `NAP ${currentUser.id}`;
+
+            if (db.balances[currentUser.id] === undefined) {
+                db.balances[currentUser.id] = 0;
+                saveDB();
+            }
+            updateBalanceUI();
+
+            if (currentUser.id === ADMIN_ID || currentUser.id == ADMIN_ID) {
+                document.getElementById('admin-badge').classList.remove('hidden');
+                document.getElementById('nav-admin-btn').classList.remove('hidden');
+            }
+
+            renderShop();
+            renderProfileHistory();
+            renderAdminPanel();
+        }
+
+        function updateBalanceUI() {
+            const bal = db.balances[currentUser.id] || 0;
+            const formatted = bal.toLocaleString('vi-VN') + 'đ';
+            document.getElementById('user-balance').innerText = formatted;
+            document.getElementById('profile-balance').innerText = formatted;
+        }
+
+        function switchTab(targetTab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${targetTab}`).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('text-indigo-400');
+                btn.classList.add('text-slate-400');
+                if(btn.dataset.target === targetTab) {
+                    btn.classList.remove('text-slate-400');
+                    btn.classList.add('text-indigo-400');
+                }
+            });
+        }
+
+        function renderShop() {
+            const container = document.getElementById('product-list');
+            container.innerHTML = '';
+            db.products.forEach(p => {
+                container.innerHTML += `
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center shadow-lg">
+                        <div>
+                            <h3 class="font-bold text-sm text-white">${p.name}</h3>
+                            <p class="text-indigo-400 font-bold text-xs mt-1">${p.price.toLocaleString('vi-VN')}đ</p>
+                            <p class="text-slate-500 text-[10px] mt-1">Kho key: <span class="text-emerald-400 font-bold">${p.keys.length}</span> key</p>
+                        </div>
+                        <button onclick="buyProduct(${p.id})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition">Mua Ngay</button>
+                    </div>
+                `;
+            });
+        }
+
+        function buyProduct(productId) {
+            const product = db.products.find(p => p.id === productId);
+            const userBal = db.balances[currentUser.id] || 0;
+
+            if (userBal < product.price) {
+                tg.showAlert("Số dư không đủ! Vui lòng nạp thêm tiền.");
+                switchTab('deposit');
+                return;
+            }
+
+            if (product.keys.length === 0) {
+                tg.showAlert("Sản phẩm này đã hết key!");
+                return;
+            }
+
+            tg.showConfirm(`Xác nhận mua [${product.name}] giá ${product.price.toLocaleString('vi-VN')}đ?`, (ok) => {
+                if (ok) {
+                    db.balances[currentUser.id] -= product.price;
+                    const grantedKey = product.keys.shift();
+                    
+                    if (!db.purchases[currentUser.id]) db.purchases[currentUser.id] = [];
+                    db.purchases[currentUser.id].unshift({
+                        name: product.name,
+                        key: grantedKey,
+                        time: new Date().toLocaleString('vi-VN')
+                    });
+
+                    saveDB(); // Lưu toàn bộ thay đổi vào bộ nhớ
+                    updateBalanceUI();
+                    renderShop();
+                    renderProfileHistory();
+
+                    sendTelegramNotification(currentUser.id, `🎉 Mua hàng thành công!\n📦 Sản phẩm: ${product.name}\n🔑 Key của bạn: \`${grantedKey}\``);
+                    tg.showAlert(`Mua thành công! Key của bạn: ${grantedKey}`);
+                }
+            });
+        }
+
+        function renderProfileHistory() {
+            const container = document.getElementById('purchase-history');
+            const history = db.purchases[currentUser.id] || [];
+            if (history.length === 0) {
+                container.innerHTML = '<p class="text-slate-500 text-center py-4">Chưa có giao dịch nào.</p>';
+                return;
+            }
+            container.innerHTML = '';
+            history.forEach(h => {
+                container.innerHTML += `
+                    <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 space-y-1">
+                        <div class="flex justify-between font-bold text-white"><span>${h.name}</span><span class="text-[10px] text-slate-500">${h.time}</span></div>
+                        <p class="text-indigo-400 font-mono bg-slate-900 p-1.5 rounded select-all">Key: ${h.key}</p>
+                    </div>
+                `;
+            });
+        }
+
+        function requestDeposit() {
+            const amountInput = document.getElementById('deposit-amount-input').value;
+            const amount = parseInt(amountInput);
+
+            if (!amount || amount <= 0) {
+                tg.showAlert("Vui lòng nhập số tiền hợp lệ đã chuyển khoản!");
+                return;
+            }
+
+            const reqId = Date.now();
+            db.deposits.push({
+                id: reqId,
+                userId: currentUser.id,
+                name: currentUser.first_name,
+                amount: amount,
+                time: new Date().toLocaleString('vi-VN'),
+                status: 'pending'
+            });
+            saveDB(); // Lưu yêu cầu nạp tiền vào cơ sở dữ liệu
+            renderAdminPanel();
+            
+            document.getElementById('deposit-amount-input').value = '';
+            sendDepositNotificationToAdmin(currentUser.id, currentUser.first_name, amount, reqId);
+            
+            tg.showAlert("Đã gửi yêu cầu nạp tiền về chat bot! Vui lòng chờ Admin duyệt.");
+            switchTab('profile');
+        }
+
+        function renderAdminPanel() {
+            if (currentUser.id !== ADMIN_ID && currentUser.id != ADMIN_ID) return;
+            
+            const select = document.getElementById('admin-key-product-select');
+            const currentSelectedVal = select.value;
+            select.innerHTML = '';
+            db.products.forEach(p => {
+                select.innerHTML += `<option value="${p.id}">${p.name} (Kho: ${p.keys.length})</option>`;
+            });
+            if(currentSelectedVal) select.value = currentSelectedVal;
+            renderKeyManagerList();
+
+            const prodListContainer = document.getElementById('admin-product-management-list');
+            prodListContainer.innerHTML = '';
+            db.products.forEach(p => {
+                prodListContainer.innerHTML += `
+                    <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
+                        <span class="font-medium text-white">${p.name} (${p.price.toLocaleString('vi-VN')}đ)</span>
+                        <button onclick="adminDeleteProduct(${p.id})" class="px-2.5 py-1 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg font-bold">Xóa</button>
+                    </div>
+                `;
+            });
+
+            const reqContainer = document.getElementById('admin-deposit-requests');
+            const pendingReqs = db.deposits.filter(d => d.status === 'pending');
+            if (pendingReqs.length === 0) {
+                reqContainer.innerHTML = '<p class="text-xs text-slate-500 text-center">Không có yêu cầu nạp tiền nào.</p>';
+                return;
+            }
+            reqContainer.innerHTML = '';
+            pendingReqs.forEach(req => {
+                reqContainer.innerHTML += `
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center">
+                        <div>
+                            <p class="font-bold text-white text-xs">${req.name} (${req.userId})</p>
+                            <p class="text-indigo-400 font-bold text-xs">Nạp: ${req.amount.toLocaleString('vi-VN')}đ</p>
+                            <p class="text-[10px] text-slate-500">${req.time}</p>
+                        </div>
+                        <button onclick="approveDeposit(${req.id})" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow">Duyệt</button>
+                    </div>
+                `;
+            });
+        }
+
+        function adminAddProduct() {
+            const name = document.getElementById('admin-p-name').value;
+            const price = parseInt(document.getElementById('admin-p-price').value);
+            if (!name || !price) return alert("Vui lòng nhập đầy đủ tên và giá!");
+            
+            db.products.push({ id: Date.now(), name, price, keys: [] });
+            saveDB(); // Lưu sản phẩm mới
+            renderShop();
+            renderAdminPanel();
+            document.getElementById('admin-p-name').value = '';
+            document.getElementById('admin-p-price').value = '';
+            alert("Thêm và lưu sản phẩm thành công!");
+        }
+
+        function adminDeleteProduct(prodId) {
+            if (confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) {
+                db.products = db.products.filter(p => p.id !== prodId);
+                saveDB(); // Cập nhật lại dữ liệu sau khi xóa
+                renderShop();
+                renderAdminPanel();
+                alert("Đã xóa sản phẩm thành công!");
+            }
+        }
+
+        function renderKeyManagerList() {
+            const prodId = parseInt(document.getElementById('admin-key-product-select').value);
+            const product = db.products.find(p => p.id === prodId);
+            const container = document.getElementById('admin-key-item-list');
+            
+            if (!product || product.keys.length === 0) {
+                container.innerHTML = '<p class="text-[11px] text-slate-500 text-center py-2">Sản phẩm này chưa có key nào.</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            product.keys.forEach((keyStr, idx) => {
+                container.innerHTML += `
+                    <div class="bg-slate-950 px-2 py-1.5 rounded-lg border border-slate-800 flex justify-between items-center text-xs font-mono">
+                        <span class="text-slate-300 truncate max-w-[200px]">${keyStr}</span>
+                        <button onclick="adminDeleteKey(${prodId}, ${idx})" class="text-red-400 hover:text-red-300 px-1.5 py-0.5 bg-red-500/10 rounded">Xóa</button>
+                    </div>
+                `;
+            });
+        }
+
+        function adminAddKeys() {
+            const prodId = parseInt(document.getElementById('admin-key-product-select').value);
+            const rawKeys = document.getElementById('admin-key-input').value.trim();
+            if (!rawKeys) return alert("Vui lòng nhập danh sách key!");
+            
+            const product = db.products.find(p => p.id === prodId);
+            const keyList = rawKeys.split('\n').map(k => k.trim()).filter(k => k);
+            product.keys.push(...keyList);
+            
+            saveDB(); // Lưu toàn bộ kho key vào hệ thống
+            renderShop();
+            renderKeyManagerList();
+            renderAdminPanel();
+            document.getElementById('admin-key-input').value = '';
+            alert(`Đã lưu ${keyList.length} key thành công!`);
+        }
+
+        function adminDeleteKey(prodId, keyIndex) {
+            const product = db.products.find(p => p.id === prodId);
+            if (product) {
+                product.keys.splice(keyIndex, 1);
+                saveDB(); // Lưu lại thay đổi
+                renderShop();
+                renderKeyManagerList();
+                renderAdminPanel();
+            }
+        }
+
+        function approveDeposit(reqId) {
+            const req = db.deposits.find(d => d.id === reqId);
+            if (!req) return;
+            
+            if (db.balances[req.userId] === undefined) db.balances[req.userId] = 0;
+            db.balances[req.userId] += req.amount;
+            req.status = 'approved';
+            
+            saveDB(); // Lưu số dư mới và trạng thái duyệt tiền
+            renderAdminPanel();
+            
+            sendTelegramNotification(req.userId, `✅ Yêu cầu nạp tiền của bạn đã được Admin duyệt!\n💰 Số dư cộng thêm: *+${req.amount.toLocaleString('vi-VN')}đ*`);
+            alert(`Đã duyệt nạp ${req.amount.toLocaleString('vi-VN')}đ cho user thành công!`);
+        }
+    </script>
+</body>
+</html>
